@@ -32,9 +32,33 @@
                     <scope>provided</scope>
                 </dependency>
             </dependencies>
+            <properties>
+              <elasticsearch.version>0.20.6</elasticsearch.version>
+            </properties>
         </profile>
+    <profile>
+      <id>0.90.5</id>
+      <activation>
+        <property>
+          <name>env.ES</name>
+          <value>0.90.5</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <!-- hard requirement for testing -->
+          <groupId>org.elasticsearch</groupId>
+          <artifactId>elasticsearch</artifactId>
+          <version>[0.90.5]</version>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+      <properties>
+        <elasticsearch.version>0.90.5</elasticsearch.version>
+      </properties>
+    </profile>
 
-    </profiles>
+  </profiles>
 	<build>
 		<plugins>
 	      <plugin>
@@ -121,9 +145,6 @@
 		</resources>
 
 	</build>
-	<properties>
-		<elasticsearch.version>0.20.6</elasticsearch.version>
-	</properties>
 
 	<dependencies>
 		<dependency>
