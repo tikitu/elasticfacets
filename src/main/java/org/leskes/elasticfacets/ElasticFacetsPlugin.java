@@ -53,12 +53,6 @@ public class ElasticFacetsPlugin extends AbstractPlugin  {
 	    	((FacetModule)module).addFacetProcessor(FacetedDateHistogramFacetProcessor.class);
 	    	((FacetModule)module).addFacetProcessor(HashedStringsFacetProcessor.class);
 		}
-        if (module instanceof ActionModule) {
-            ((ActionModule)module).registerAction(CacheStatsPerFieldAction.INSTANCE, TransportCacheStatsPerFieldAction.class);
-        }
-        if (module instanceof RestModule) {
-            ((RestModule)module).addRestAction(RestCacheStatsPerFieldAction.class);
-        }
     }
 
 
