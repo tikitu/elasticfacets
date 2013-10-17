@@ -1,62 +1,45 @@
 package org.leskes.elasticfacets;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.elasticsearch.common.collect.ImmutableMap;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.google.common.collect.ImmutableMap;
+import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.common.jackson.core.JsonFactory;
 import org.elasticsearch.common.joda.Joda;
 import org.elasticsearch.common.joda.TimeZoneRounding;
-import org.elasticsearch.common.joda.time.Chronology;
-import org.elasticsearch.common.joda.time.DateTimeField;
-import org.elasticsearch.common.joda.time.DateTimeZone;
-import org.elasticsearch.common.joda.time.chrono.ISOChronology;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentGenerator;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.json.JsonXContentGenerator;
-import org.elasticsearch.index.field.data.FieldDataType;
+import org.elasticsearch.index.fielddata.IndexNumericFieldData;
 import org.elasticsearch.index.mapper.FieldMapper;
-import org.elasticsearch.search.facet.Facet;
-import org.elasticsearch.search.facet.FacetCollector;
-import org.elasticsearch.search.facet.FacetPhaseExecutionException;
-import org.elasticsearch.search.facet.FacetProcessor;
-import org.elasticsearch.search.facet.FacetProcessors;
-import org.elasticsearch.search.facet.InternalFacet;
+import org.elasticsearch.search.facet.*;
+import org.elasticsearch.search.facet.datehistogram.DateHistogramFacet;
 import org.elasticsearch.search.internal.SearchContext;
+import org.joda.time.Chronology;
+import org.joda.time.DateTimeField;
+import org.joda.time.DateTimeZone;
+import org.joda.time.chrono.ISOChronology;
 
-import static org.leskes.elasticfacets.FacetedDateHistogramFacet.readFacetedHistogramFacet;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
-public class FacetedDateHistogramFacetProcessor extends AbstractComponent implements FacetProcessor  {
+public class FacetedDateHistogramFacetProcessor extends AbstractComponent implements FacetParser {
 
     private static final String STREAM_TYPE = "facetedDateHistogram";
-
-    public static void registerStreams() {
-        InternalFacet.Streams.registerStream(STREAM, STREAM_TYPE);
-    }
-
-    static InternalFacet.Stream STREAM = new InternalFacet.Stream() {
-        public Facet readFacet(StreamInput in) throws IOException {
-            return readFacetedHistogramFacet(in);
-        }
-    };
 
     public String streamType() {
         return STREAM_TYPE;
     }
 
     private final ImmutableMap<String, DateFieldParser> dateFieldParsers;
-	private FacetProcessors processors;
+	private FacetParsers processors;
 	
 	private static JsonFactory jsonFactory = new JsonFactory();
 
@@ -65,36 +48,46 @@ public class FacetedDateHistogramFacetProcessor extends AbstractComponent implem
     public FacetedDateHistogramFacetProcessor(Settings settings) {
         super(settings);
         FacetedDateHistogramFacet.registerStreams();
-        
-        HashMap<String, DateFieldParser> dateFieldParsersMap = new HashMap<String, DateFieldParser>();
-        dateFieldParsersMap.put("year", new DateFieldParser.YearOfCentury());
-        dateFieldParsersMap.put("1y", new DateFieldParser.YearOfCentury());
-        dateFieldParsersMap.put("month", new DateFieldParser.MonthOfYear());
-        dateFieldParsersMap.put("quarter", new DateFieldParser.Quarter());
-        dateFieldParsersMap.put("1m", new DateFieldParser.MonthOfYear());
-        dateFieldParsersMap.put("week", new DateFieldParser.WeekOfWeekyear());
-        dateFieldParsersMap.put("1w", new DateFieldParser.WeekOfWeekyear());
-        dateFieldParsersMap.put("day", new DateFieldParser.DayOfMonth());
-        dateFieldParsersMap.put("1d", new DateFieldParser.DayOfMonth());
-        dateFieldParsersMap.put("hour", new DateFieldParser.HourOfDay());
-        dateFieldParsersMap.put("1h", new DateFieldParser.HourOfDay());
-        dateFieldParsersMap.put("minute", new DateFieldParser.MinuteOfHour());
-        dateFieldParsersMap.put("1m", new DateFieldParser.MinuteOfHour());
-        dateFieldParsersMap.put("second", new DateFieldParser.SecondOfMinute());
-        dateFieldParsersMap.put("1s", new DateFieldParser.SecondOfMinute());;
-        dateFieldParsers = ImmutableMap.copyOf(dateFieldParsersMap);
+
+        dateFieldParsers = MapBuilder.<String, DateFieldParser>newMapBuilder()
+                .put("year", new DateFieldParser.YearOfCentury())
+                .put("1y", new DateFieldParser.YearOfCentury())
+                .put("quarter", new DateFieldParser.Quarter())
+                .put("month", new DateFieldParser.MonthOfYear())
+                .put("1m", new DateFieldParser.MonthOfYear())
+                .put("week", new DateFieldParser.WeekOfWeekyear())
+                .put("1w", new DateFieldParser.WeekOfWeekyear())
+                .put("day", new DateFieldParser.DayOfMonth())
+                .put("1d", new DateFieldParser.DayOfMonth())
+                .put("hour", new DateFieldParser.HourOfDay())
+                .put("1h", new DateFieldParser.HourOfDay())
+                .put("minute", new DateFieldParser.MinuteOfHour())
+                .put("1m", new DateFieldParser.MinuteOfHour())
+                .put("second", new DateFieldParser.SecondOfMinute())
+                .put("1s", new DateFieldParser.SecondOfMinute())
+                .immutableMap();
     }
-    
+
+    @Override
+    public FacetExecutor.Mode defaultMainMode() {
+        return FacetExecutor.Mode.COLLECTOR;
+    }
+
+    @Override
+    public FacetExecutor.Mode defaultGlobalMode() {
+        return FacetExecutor.Mode.COLLECTOR;
+    }
+
     @Inject
-    public void SetProcessors(Set<FacetProcessor> processors) {
-    	this.processors= new FacetProcessors(processors);
+    public void SetProcessors(Set<FacetParser> processors) {
+    	this.processors= new FacetParsers(processors);
     }
 
     public String[] types() {
         return new String[]{FacetedDateHistogramFacet.TYPE};
     }
 
-    public FacetCollector parse(String facetName, XContentParser parser, SearchContext context) throws IOException {
+    public FacetExecutor parse(String facetName, XContentParser parser, SearchContext context) throws IOException {
         String keyField = null;
         Map<String, Object> params = null;
         String interval = null;
@@ -106,7 +99,7 @@ public class FacetedDateHistogramFacetProcessor extends AbstractComponent implem
         float factor = 1.0f;
         Chronology chronology = ISOChronology.getInstanceUTC();
 
-        FacetProcessor internalProcessor = null; 
+        FacetParser internalProcessor = null;
         byte[] internalConfig = null;
         
         XContentParser.Token token;
@@ -126,11 +119,10 @@ public class FacetedDateHistogramFacetProcessor extends AbstractComponent implem
                     if (internalProcessor == null) {
                         throw new FacetPhaseExecutionException(facetName, "No facet type found for [" + facetType + "]");
                     }
-                    ;
                     // Store underlying facet configuration
                 	token = parser.nextToken(); // move the start of object...
                     ByteArrayOutputStream memstream = new ByteArrayOutputStream(20);
-                    XContentGenerator generator = new JsonXContentGenerator(jsonFactory.createJsonGenerator(memstream));
+                    XContentGenerator generator = new JsonXContentGenerator(jsonFactory.createGenerator(memstream));
                     XContentHelper.copyCurrentStructure(generator, parser);
                     generator.close();
                     memstream.close();
@@ -165,23 +157,20 @@ public class FacetedDateHistogramFacetProcessor extends AbstractComponent implem
                 }
             }
         }
-        
-       
-        if (keyField == null) {
-            throw new FacetPhaseExecutionException(facetName, "key field is required to be set for histogram facet, either using [field] or using [key_field]");
-        }
-
-        FieldMapper mapper = context.smartNameFieldMapper(keyField);
-        if (mapper == null) {
-            throw new FacetPhaseExecutionException(facetName, "(key) field [" + keyField + "] not found");
-        }
-        if (mapper.fieldDataType() != FieldDataType.DefaultTypes.LONG) {
-            throw new FacetPhaseExecutionException(facetName, "(key) field [" + keyField + "] is not of type date");
-        }
 
         if (interval == null) {
             throw new FacetPhaseExecutionException(facetName, "[interval] is required to be set for histogram facet");
         }
+
+        if (keyField == null) {
+            throw new FacetPhaseExecutionException(facetName, "key field is required to be set for histogram facet, either using [field] or using [key_field]");
+        }
+
+        FieldMapper keyMapper = context.smartNameFieldMapper(keyField);
+        if (keyMapper == null) {
+            throw new FacetPhaseExecutionException(facetName, "(key) field [" + keyField + "] not found");
+        }
+        IndexNumericFieldData keyIndexFieldData = context.fieldData().getForField(keyMapper);
 
         if (internalProcessor == null) {
             throw new FacetPhaseExecutionException(facetName, "faceted histogram misses an internal facet definition.");
@@ -190,24 +179,20 @@ public class FacetedDateHistogramFacetProcessor extends AbstractComponent implem
         TimeZoneRounding.Builder tzRoundingBuilder;
         DateFieldParser fieldParser = dateFieldParsers.get(interval);
         if (fieldParser != null) {
-        	DateTimeField dtf = fieldParser.parse(chronology);
-            tzRoundingBuilder = TimeZoneRounding.builder(dtf);
+            tzRoundingBuilder = TimeZoneRounding.builder(fieldParser.parse(chronology));
         } else {
             // the interval is a time value?
             tzRoundingBuilder = TimeZoneRounding.builder(TimeValue.parseTimeValue(interval, null));
         }
 
         TimeZoneRounding tzRounding = tzRoundingBuilder
-                .preZone(preZone)
-                .postZone(postZone)
+                .preZone(preZone).postZone(postZone)
                 .preZoneAdjustLargeInterval(preZoneAdjustLargeInterval)
                 .preOffset(preOffset).postOffset(postOffset)
                 .factor(factor)
                 .build();
-        
-        
-        
-        return new FacetedDateHistogramCollector(facetName, keyField, tzRounding, internalProcessor,internalConfig,context);
+
+        return new FacetedDateHistogramCollector(keyIndexFieldData, tzRounding, internalProcessor, internalConfig, context);
        
     }
 
@@ -235,11 +220,6 @@ public class FacetedDateHistogramFacetProcessor extends AbstractComponent implem
                 return DateTimeZone.forID(text);
             }
         }
-    }
-
-    public Facet reduce(String name, List<Facet> facets) {
-        FacetedDateHistogramFacet first = (FacetedDateHistogramFacet) facets.get(0);
-        return first.reduce(name, facets, processors);
     }
 
     static interface DateFieldParser {

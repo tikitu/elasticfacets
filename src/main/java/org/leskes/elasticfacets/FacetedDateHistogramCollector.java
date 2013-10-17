@@ -29,7 +29,6 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 
     private final TimeZoneRounding tzRounding;
     private final IndexNumericFieldData indexFieldData;
-    final DateHistogramFacet.ComparatorType comparatorType;
 
     final Recycler.V<TLongLongHashMap> counts;
     final Recycler.V<ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry>> entries;
@@ -42,15 +41,14 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
     public FacetedDateHistogramCollector(
             IndexNumericFieldData indexFieldData,
 			TimeZoneRounding tzRounding,
-            DateHistogramFacet.ComparatorType comparatorType,
-            CacheRecycler cacheRecycler,
-			FacetParser internalParser,
+        	FacetParser internalParser,
 			byte[] internalFacetConfig,
             SearchContext searchContext) throws IOException {
         super();
         this.indexFieldData = indexFieldData;
         this.tzRounding = tzRounding;
-        this.comparatorType = comparatorType;
+
+        CacheRecycler cacheRecycler = searchContext.cacheRecycler();
 
         this.counts = cacheRecycler.longLongMap(-1);
         this.entries = cacheRecycler.longObjectMap(-1);

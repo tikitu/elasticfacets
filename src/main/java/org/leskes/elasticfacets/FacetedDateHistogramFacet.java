@@ -241,5 +241,14 @@ public class FacetedDateHistogramFacet extends InternalFacet {
     }
 
 
+    static InternalFacet.Stream STREAM = new InternalFacet.Stream() {
+        public Facet readFacet(StreamInput in) throws IOException {
+            return readFacetedHistogramFacet(in);
+        }
+    };
+
+    public static void registerStreams() {
+        InternalFacet.Streams.registerStream(STREAM, STREAM_TYPE);
+    }
 
 }
