@@ -32,14 +32,12 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
     final DateHistogramFacet.ComparatorType comparatorType;
 
     final Recycler.V<TLongLongHashMap> counts;
-    final Recycler.V<ExtTLongObjectHashMap<Object>> entries;
+    final Recycler.V<ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry>> entries;
 
 	private final FacetExecutor internalExampleCollector;
 
 	private static ESLogger logger = Loggers.getLogger(FacetedDateHistogramCollector.class);
     private InternalCollectorFactory colFactory;
-    private String facetName;
-
 
     public FacetedDateHistogramCollector(
             IndexNumericFieldData indexFieldData,
@@ -119,9 +117,9 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 	public InternalFacet buildFacet(String facetName) {
         for (Object o: entries.v().internalValues()){
 			if (o == null) continue;
-			((FacetedDateHistogramFacet.Entry)o).facetize();
+			((FacetedDateHistogramFacet.Entry)o).facetize(facetName);
 		}
-		return new FacetedDateHistogramFacet(facetName, (ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry>) entries.v());
+		return new FacetedDateHistogramFacet(facetName, entries);
 	}
 	
 	public static class FacetedDateHistogramProc extends LongFacetAggregatorBase {
@@ -131,7 +129,7 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 		final protected  InternalCollectorFactory collectorFactory;
 		
         private AtomicReaderContext currentContext = null;
-        private ExtTLongObjectHashMap entries;
+        private ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry> entries;
 
         public FacetedDateHistogramProc(TLongLongHashMap v,
                                         TimeZoneRounding tzRounding,
@@ -150,7 +148,7 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 				
 				FacetedDateHistogramFacet.Entry e = (FacetedDateHistogramFacet.Entry)o;
 				
-				e.collector.setNextReader(context);
+				e.executor.collector().setNextReader(context);
 			}
             currentContext = context;
 		}
@@ -162,7 +160,7 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 			entry = getOrCreateEntry(value, bucketTime);
 			
 			try {
-				entry.collector.collect(docId);
+				entry.executor.collector().collect(docId);
 			} catch (Exception e) {
 				throw new RuntimeException("Error running an internal collector",e);
 			}			
@@ -172,11 +170,11 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 		private FacetedDateHistogramFacet.Entry getOrCreateEntry(
 				long value, long time) {
 			FacetedDateHistogramFacet.Entry entry;
-			entry = (FacetedDateHistogramFacet.Entry) entries.get(time);
+			entry = entries.get(time);
 			if (entry == null) {
 				try {
 					entry = new FacetedDateHistogramFacet.Entry(time, collectorFactory.createInternalCollector());
-					entry.collector.setNextReader(currentContext);
+					entry.executor.collector().setNextReader(currentContext);
 				} catch (Exception e) {
 					throw new RuntimeException("Error creating an internal collector",e);
 				}

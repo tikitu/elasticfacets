@@ -10,6 +10,7 @@ import java.util.Set;
 import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.jackson.core.JsonFactory;
 import org.elasticsearch.common.joda.Joda;
 import org.elasticsearch.common.joda.TimeZoneRounding;
@@ -30,12 +31,31 @@ import org.elasticsearch.search.facet.FacetCollector;
 import org.elasticsearch.search.facet.FacetPhaseExecutionException;
 import org.elasticsearch.search.facet.FacetProcessor;
 import org.elasticsearch.search.facet.FacetProcessors;
+import org.elasticsearch.search.facet.InternalFacet;
 import org.elasticsearch.search.internal.SearchContext;
+
+import static org.leskes.elasticfacets.FacetedDateHistogramFacet.readFacetedHistogramFacet;
 
 
 public class FacetedDateHistogramFacetProcessor extends AbstractComponent implements FacetProcessor  {
 
-	private final ImmutableMap<String, DateFieldParser> dateFieldParsers;
+    private static final String STREAM_TYPE = "facetedDateHistogram";
+
+    public static void registerStreams() {
+        InternalFacet.Streams.registerStream(STREAM, STREAM_TYPE);
+    }
+
+    static InternalFacet.Stream STREAM = new InternalFacet.Stream() {
+        public Facet readFacet(StreamInput in) throws IOException {
+            return readFacetedHistogramFacet(in);
+        }
+    };
+
+    public String streamType() {
+        return STREAM_TYPE;
+    }
+
+    private final ImmutableMap<String, DateFieldParser> dateFieldParsers;
 	private FacetProcessors processors;
 	
 	private static JsonFactory jsonFactory = new JsonFactory();
