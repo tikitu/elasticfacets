@@ -122,7 +122,7 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
         final Object[] localEntries = entries.v().values;
         for (Object o: localEntries){
 			if (o == null) continue;
-			((FacetedDateHistogramFacet.Entry)o).facetize(facetName);
+			((FacetedDateHistogramFacet.Entry)o).facetize();
 		}
 		return new FacetedDateHistogramFacet(facetName, entries);
 	}

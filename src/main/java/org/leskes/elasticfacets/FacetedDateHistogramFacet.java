@@ -73,8 +73,8 @@ public class FacetedDateHistogramFacet extends InternalFacet {
 
         }
         
-        public void facetize(String facetName) {
-        	this.internalFacet = executor.buildFacet(facetName);
+        public void facetize() {
+        	this.internalFacet = executor.buildFacet("facet"); // internal entry is called "facet": that's the json key it should appear under
         	this.executor = null;
         }
         
