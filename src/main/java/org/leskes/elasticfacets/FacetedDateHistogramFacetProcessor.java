@@ -1,12 +1,16 @@
 package org.leskes.elasticfacets;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.google.common.collect.ImmutableMap;
+import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.jackson.core.JsonFactory;
 import org.elasticsearch.common.joda.Joda;
 import org.elasticsearch.common.joda.TimeZoneRounding;
+import org.elasticsearch.common.joda.time.Chronology;
+import org.elasticsearch.common.joda.time.DateTimeField;
+import org.elasticsearch.common.joda.time.DateTimeZone;
+import org.elasticsearch.common.joda.time.chrono.ISOChronology;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentGenerator;
@@ -16,12 +20,7 @@ import org.elasticsearch.common.xcontent.json.JsonXContentGenerator;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.search.facet.*;
-import org.elasticsearch.search.facet.datehistogram.DateHistogramFacet;
 import org.elasticsearch.search.internal.SearchContext;
-import org.joda.time.Chronology;
-import org.joda.time.DateTimeField;
-import org.joda.time.DateTimeZone;
-import org.joda.time.chrono.ISOChronology;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -120,14 +119,14 @@ public class FacetedDateHistogramFacetProcessor extends AbstractComponent implem
                         throw new FacetPhaseExecutionException(facetName, "No facet type found for [" + facetType + "]");
                     }
                     // Store underlying facet configuration
-                	token = parser.nextToken(); // move the start of object...
+                	token = parser.nextToken(); // move to the start of object...
                     ByteArrayOutputStream memstream = new ByteArrayOutputStream(20);
                     XContentGenerator generator = new JsonXContentGenerator(jsonFactory.createGenerator(memstream));
                     XContentHelper.copyCurrentStructure(generator, parser);
                     generator.close();
                     memstream.close();
                     internalConfig = memstream.toByteArray(); // now we're at the end of the underlying config.
-                                    		
+
                     while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT); // eat everything else under the "facet" clause
                 	
                 }

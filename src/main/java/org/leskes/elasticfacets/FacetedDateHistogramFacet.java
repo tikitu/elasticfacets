@@ -1,12 +1,16 @@
 package org.leskes.elasticfacets;
 
+import org.apache.lucene.search.Collector;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.bytes.HashedBytesArray;
+import org.elasticsearch.common.collect.Lists;
+import org.elasticsearch.common.hppc.LongObjectMap;
+import org.elasticsearch.common.hppc.LongObjectOpenHashMap;
+import org.elasticsearch.common.hppc.ObjectContainer;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.recycler.Recycler;
-import org.elasticsearch.common.trove.ExtTLongObjectHashMap;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.search.facet.Facet;
@@ -58,10 +62,11 @@ public class FacetedDateHistogramFacet extends InternalFacet {
     public static class Entry extends EntryBase {
         protected InternalFacet internalFacet;
         protected FacetExecutor executor;
+        protected FacetExecutor.Collector collector;
 
-        public Entry(long time, FacetExecutor collector) {
+        public Entry(long time, FacetExecutor executor) {
         	super(time);
-            this.executor = collector;
+            this.executor = executor;
         }
         public Entry(long time) {
         	this(time,null);
@@ -75,6 +80,18 @@ public class FacetedDateHistogramFacet extends InternalFacet {
         
         public Facet facet() {
         	return internalFacet;
+        }
+
+        /**
+         * Unlike FacetExecutor.collector() this guarantees to always return <i>the same</i> collector.
+         * @return
+         */
+        public FacetExecutor.Collector collector() {
+            if (executor == null) return null;
+            if (collector == null) {
+                collector = executor.collector();
+            }
+            return collector;
         }
 
     }
@@ -92,10 +109,7 @@ public class FacetedDateHistogramFacet extends InternalFacet {
     }
 
 
-    private String name;
-    
-
-    protected Recycler.V<ExtTLongObjectHashMap<Entry>> entries;
+    protected Recycler.V<LongObjectOpenHashMap<Entry>> entries;
     
     protected List<Entry> entriesAsList;
 
@@ -103,14 +117,23 @@ public class FacetedDateHistogramFacet extends InternalFacet {
 
     public List<Entry> collapseToAList() {
         if (entriesAsList == null) {
-        	entriesAsList = new ArrayList<Entry>(entries.v().valueCollection());
+            entriesAsList = Lists.newArrayListWithCapacity(entries.v().size());
+            final Object[] values = entries.v().values;
+            for (int i = 0; i < values.length; i++) {
+                Entry value  = (Entry) values[i];
+                if (value != null) entriesAsList.add(value);
+            }
+
             releaseEntries();
         }
         return entriesAsList;
     }
-    
 
     private FacetedDateHistogramFacet() {
+    }
+
+    private FacetedDateHistogramFacet(String facetName) {
+        super(facetName);
     }
 
     @Override
@@ -118,10 +141,9 @@ public class FacetedDateHistogramFacet extends InternalFacet {
         return STREAM_TYPE;
     }
 
-    public FacetedDateHistogramFacet(String name, Recycler.V<ExtTLongObjectHashMap<Entry>> entries) {
+    public FacetedDateHistogramFacet(String name, Recycler.V<LongObjectOpenHashMap<Entry>> entries) {
+        super(name);
     	// Now we own the entries map. It is MUST come from the cache recycler..
-        this.name = name;
-        
         this.entries = entries;
     }
 
@@ -141,7 +163,7 @@ public class FacetedDateHistogramFacet extends InternalFacet {
             return internalFacet;
         }
 
-        Recycler.V<ExtTLongObjectHashMap<MultiEntry>> map = context.cacheRecycler().longObjectMap(-1);
+        Recycler.V<LongObjectOpenHashMap<MultiEntry>> map = context.cacheRecycler().longObjectMap(-1);
 
         for (Facet facet : facets) {
         	FacetedDateHistogramFacet histoFacet = (FacetedDateHistogramFacet) facet;
@@ -156,7 +178,7 @@ public class FacetedDateHistogramFacet extends InternalFacet {
         }
 
         // sort
-        Object[] values = map.v().internalValues();
+        Object[] values = map.v().values;
         Arrays.sort(values, (Comparator) comparator);
         List<MultiEntry> ordered = new ArrayList<MultiEntry>(map.v().size());
         for (int i = 0; i < map.v().size(); i++) {
@@ -169,14 +191,14 @@ public class FacetedDateHistogramFacet extends InternalFacet {
         map.release();
 
         // just initialize it as already ordered facet
-        FacetedDateHistogramFacet ret = new FacetedDateHistogramFacet();
-        ret.name = name;
+        FacetedDateHistogramFacet ret = new FacetedDateHistogramFacet(getName());
         ret.entriesAsList = new ArrayList<Entry>(ordered.size());
         
         for (MultiEntry me : ordered) {
         	Entry e = new Entry(me.time);
         	InternalFacet f = me.facets.get(0);
-            e.internalFacet = (InternalFacet) f.reduce(new ReduceContext(context.cacheRecycler(), (List<Facet>) me.facets));
+            List<Facet> facetsAsFacets = new ArrayList<Facet>(me.facets); // cannot pass List<InternalFacet> to ReduceContext, deep sighs
+            e.internalFacet = (InternalFacet) f.reduce(new ReduceContext(context.cacheRecycler(), facetsAsFacets));
         	ret.entriesAsList.add(e);
         }
 
@@ -190,7 +212,7 @@ public class FacetedDateHistogramFacet extends InternalFacet {
     }
 
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(name);
+        builder.startObject(getName());
         builder.field(Fields._TYPE, TYPE);
         builder.startArray(Fields.ENTRIES);
         for (Entry entry : collapseToAList()) {
@@ -211,7 +233,7 @@ public class FacetedDateHistogramFacet extends InternalFacet {
     }
 
     public void readFrom(StreamInput in) throws IOException {
-        name = in.readString();
+        super.readFrom(in);
 
         int size = in.readVInt();
         entries = SearchContext.current().cacheRecycler().longObjectMap(-1);
@@ -225,7 +247,8 @@ public class FacetedDateHistogramFacet extends InternalFacet {
     }
 
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);
+        super.writeTo(out);
+
         out.writeVInt(entries.v().size());
         for (Entry e : collapseToAList()) {
             out.writeLong(e.time);
@@ -239,7 +262,6 @@ public class FacetedDateHistogramFacet extends InternalFacet {
 	public String getType() {
         return TYPE;
     }
-
 
     static InternalFacet.Stream STREAM = new InternalFacet.Stream() {
         public Facet readFacet(StreamInput in) throws IOException {

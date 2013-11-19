@@ -1,23 +1,19 @@
 package org.leskes.elasticfacets;
 
-import gnu.trove.map.hash.TLongLongHashMap;
 import org.apache.lucene.index.AtomicReaderContext;
 import org.elasticsearch.cache.recycler.CacheRecycler;
+import org.elasticsearch.common.hppc.LongLongOpenHashMap;
+import org.elasticsearch.common.hppc.LongObjectOpenHashMap;
 import org.elasticsearch.common.joda.TimeZoneRounding;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.recycler.Recycler;
-import org.elasticsearch.common.trove.ExtTLongObjectHashMap;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
 import org.elasticsearch.index.fielddata.LongValues;
-import org.elasticsearch.search.facet.FacetExecutor;
-import org.elasticsearch.search.facet.FacetParser;
-import org.elasticsearch.search.facet.InternalFacet;
-import org.elasticsearch.search.facet.LongFacetAggregatorBase;
-import org.elasticsearch.search.facet.datehistogram.DateHistogramFacet;
+import org.elasticsearch.search.facet.*;
 import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
@@ -30,8 +26,8 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
     private final TimeZoneRounding tzRounding;
     private final IndexNumericFieldData indexFieldData;
 
-    final Recycler.V<TLongLongHashMap> counts;
-    final Recycler.V<ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry>> entries;
+    final Recycler.V<LongLongOpenHashMap> counts;
+    final Recycler.V<LongObjectOpenHashMap<FacetedDateHistogramFacet.Entry>> entries;
 
 	private final FacetExecutor internalExampleCollector;
 
@@ -77,6 +73,9 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 		
 		public FacetExecutor createInternalCollector() throws IOException {
 			XContentParser parser = XContentFactory.xContent(XContentType.JSON).createParser(internalFacetConfig);
+            XContentParser.Token token = parser.nextToken(); // advance past opening brace
+            if (token != XContentParser.Token.START_OBJECT)
+                throw new FacetPhaseExecutionException("faceted_date_histogram", "Internal facet definition is malformed");
 	        try {
 	            return internalParser.parse("facet", parser, searchContext);
 	        } finally {
@@ -93,11 +92,17 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 
         public Collector() {
             this.histoProc = new FacetedDateHistogramProc(counts.v(), tzRounding, colFactory,
-                    (ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry>) entries.v());
+                    (LongObjectOpenHashMap<FacetedDateHistogramFacet.Entry>) entries.v());
         }
 
         @Override
-        public void postCollection() {} // default implementation doesn't call this
+        public void postCollection() {
+            final Object[] localEntries = entries.v().values;
+            for (Object o: localEntries) {
+                if (o == null) continue;
+                ((FacetedDateHistogramFacet.Entry) o).collector().postCollection();
+            }
+        }
 
         @Override
         public void collect(int doc) throws IOException {
@@ -113,7 +118,9 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 
 	@Override
 	public InternalFacet buildFacet(String facetName) {
-        for (Object o: entries.v().internalValues()){
+        // Java throws classcastexception here when accessing entries.values directly, some kind of generics problem
+        final Object[] localEntries = entries.v().values;
+        for (Object o: localEntries){
 			if (o == null) continue;
 			((FacetedDateHistogramFacet.Entry)o).facetize(facetName);
 		}
@@ -127,12 +134,12 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 		final protected  InternalCollectorFactory collectorFactory;
 		
         private AtomicReaderContext currentContext = null;
-        private ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry> entries;
+        private LongObjectOpenHashMap<FacetedDateHistogramFacet.Entry> entries;
 
-        public FacetedDateHistogramProc(TLongLongHashMap v,
+        public FacetedDateHistogramProc(LongLongOpenHashMap v,
                                         TimeZoneRounding tzRounding,
                                         InternalCollectorFactory collectorFactor,
-                                        ExtTLongObjectHashMap<FacetedDateHistogramFacet.Entry> entries
+                                        LongObjectOpenHashMap<FacetedDateHistogramFacet.Entry> entries
                                         )
 		{
 			this.tzRounding = tzRounding;
@@ -141,12 +148,14 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
         }
 		
 		public void setNextReader(AtomicReaderContext context) throws IOException {
-			for (Object o : entries.internalValues()) {
+            // Java throws classcastexception here when accessing entries.values directly, some kind of generics problem
+			final Object[] localEntries = entries.values;
+            for (Object o: localEntries) {
 				if (o == null) continue;
+
+                FacetedDateHistogramFacet.Entry e = (FacetedDateHistogramFacet.Entry)o;
 				
-				FacetedDateHistogramFacet.Entry e = (FacetedDateHistogramFacet.Entry)o;
-				
-				e.executor.collector().setNextReader(context);
+				e.collector().setNextReader(context);
 			}
             currentContext = context;
 		}
@@ -158,7 +167,7 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 			entry = getOrCreateEntry(value, bucketTime);
 			
 			try {
-				entry.executor.collector().collect(docId);
+				entry.collector().collect(docId);
 			} catch (Exception e) {
 				throw new RuntimeException("Error running an internal collector",e);
 			}			
@@ -172,7 +181,7 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 			if (entry == null) {
 				try {
 					entry = new FacetedDateHistogramFacet.Entry(time, collectorFactory.createInternalCollector());
-					entry.executor.collector().setNextReader(currentContext);
+					entry.collector().setNextReader(currentContext);
 				} catch (Exception e) {
 					throw new RuntimeException("Error creating an internal collector",e);
 				}

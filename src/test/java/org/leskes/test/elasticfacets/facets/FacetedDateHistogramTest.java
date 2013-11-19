@@ -1,5 +1,6 @@
 package org.leskes.test.elasticfacets.facets;
 
+import org.elasticsearch.action.search.SearchOperationThreading;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.search.facet.terms.TermsFacet;
@@ -24,7 +25,7 @@ public class FacetedDateHistogramTest extends AbstractFacetTest {
 				.setSource(
 						jsonBuilder().startObject().field("tag", "week1").field("date","2012-07-03T10:00:00.000Z")
 								.endObject()).execute().actionGet();
-		client.admin().indices().prepareFlush().setRefresh(true).execute()
+		client.admin().indices().prepareFlush().setFull(true).execute()
 				.actionGet();
 		
 		documentCount++;
@@ -51,18 +52,19 @@ public class FacetedDateHistogramTest extends AbstractFacetTest {
 						     "            \"facet\": { \"terms\" : { \"field\": \"tag\"}}  "+
 							 "}      }      }"
 								).getBytes("UTF-8"))
+                    .setOperationThreading(SearchOperationThreading.NO_THREADS)
 					.execute().actionGet();
 
-			assertThat(searchResponse.hits().totalHits(), equalTo(documentCount));
+			assertThat(searchResponse.getHits().totalHits(), equalTo(documentCount));
 
-			FacetedDateHistogramFacet facet = searchResponse.facets().facet("facet1");
-			assertThat(facet.name(), equalTo("facet1"));
+			FacetedDateHistogramFacet facet = searchResponse.getFacets().facet("facet1");
+			assertThat(facet.getName(), equalTo("facet1"));
 			List<Entry> entries = facet.collapseToAList();
 			assertThat(entries.size(), equalTo(2));
 			assertThat(entries.get(0).time,equalTo(1341187200000L));
-			assertThat(((TermsFacet)entries.get(0).facet()).getEntries().get(0).getTerm(), equalTo("week1"));
+			assertThat(((TermsFacet)entries.get(0).facet()).getEntries().get(0).getTerm().string(), equalTo("week1"));
 			assertThat(entries.get(1).time,equalTo(1341792000000L));
-			assertThat(((TermsFacet)entries.get(1).facet()).getEntries().get(0).getTerm(), equalTo("week2"));
+			assertThat(((TermsFacet)entries.get(1).facet()).getEntries().get(0).getTerm().string(), equalTo("week2"));
 		}
 	}
 
