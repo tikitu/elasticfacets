@@ -109,7 +109,7 @@ public class FacetedDateHistogramFacet extends InternalFacet {
     }
 
 
-    protected Recycler.V<LongObjectOpenHashMap<Entry>> entries;
+    protected LongObjectOpenHashMap<Entry> entries;
     
     protected List<Entry> entriesAsList;
 
@@ -117,8 +117,8 @@ public class FacetedDateHistogramFacet extends InternalFacet {
 
     public List<Entry> collapseToAList() {
         if (entriesAsList == null) {
-            entriesAsList = Lists.newArrayListWithCapacity(entries.v().size());
-            final Object[] values = entries.v().values;
+            entriesAsList = Lists.newArrayListWithCapacity(entries.size());
+            final Object[] values = entries.values;
             for (int i = 0; i < values.length; i++) {
                 Entry value  = (Entry) values[i];
                 if (value != null) entriesAsList.add(value);
@@ -141,14 +141,14 @@ public class FacetedDateHistogramFacet extends InternalFacet {
         return STREAM_TYPE;
     }
 
-    public FacetedDateHistogramFacet(String name, Recycler.V<LongObjectOpenHashMap<Entry>> entries) {
+    public FacetedDateHistogramFacet(String name, LongObjectOpenHashMap<Entry> entries) {
         super(name);
     	// Now we own the entries map. It is MUST come from the cache recycler..
         this.entries = entries;
     }
 
     void releaseEntries() {
-        entries.release();
+        // do nothing: not our responsibility any more (TODO remove this!!!)
     }
 
 
@@ -234,28 +234,26 @@ public class FacetedDateHistogramFacet extends InternalFacet {
 
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
-
         int size = in.readVInt();
-        entries = SearchContext.current().cacheRecycler().longObjectMap(-1);
+        entries = new LongObjectOpenHashMap<Entry>(size);
         for (int i = 0; i < size; i++) {
         	Entry e = new Entry(in.readLong(),null);
         	
         	BytesReference internal_type = in.readBytesReference();
             e.internalFacet = (InternalFacet) Streams.stream(internal_type).readFacet(in);
-            entries.v().put(e.time, e);
+            entries.put(e.time, e);
         }
     }
 
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
 
-        out.writeVInt(entries.v().size());
+        out.writeVInt(entries.size());
         for (Entry e : collapseToAList()) {
             out.writeLong(e.time);
             out.writeBytesReference(e.internalFacet.streamType());
             e.internalFacet.writeTo(out);
         }
-        releaseEntries();
     }
 
 

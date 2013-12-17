@@ -118,13 +118,16 @@ public class FacetedDateHistogramCollector extends FacetExecutor {
 
 	@Override
 	public InternalFacet buildFacet(String facetName) {
+        // Here we get the entries out of the thread-local recycler and into a map we can share around
+        LongObjectOpenHashMap<FacetedDateHistogramFacet.Entry> entriesForFacet = LongObjectOpenHashMap.from(entries.v());
+        entries.release();
         // Java throws classcastexception here when accessing entries.values directly, some kind of generics problem
-        final Object[] localEntries = entries.v().values;
+        final Object[] localEntries = entriesForFacet.values;
         for (Object o: localEntries){
 			if (o == null) continue;
 			((FacetedDateHistogramFacet.Entry)o).facetize();
 		}
-		return new FacetedDateHistogramFacet(facetName, entries);
+		return new FacetedDateHistogramFacet(facetName, entriesForFacet);
 	}
 	
 	public static class FacetedDateHistogramProc extends LongFacetAggregatorBase {
