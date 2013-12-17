@@ -158,7 +158,7 @@ public abstract class AbstractNodesTests {
       return numberOfShards();
    }
    protected int numberOfShards() {
-      return 1;
+      return 2;
    }
 
    @AfterClass
