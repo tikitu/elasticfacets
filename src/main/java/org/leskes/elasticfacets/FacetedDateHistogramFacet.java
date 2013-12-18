@@ -123,8 +123,6 @@ public class FacetedDateHistogramFacet extends InternalFacet {
                 Entry value  = (Entry) values[i];
                 if (value != null) entriesAsList.add(value);
             }
-
-            releaseEntries();
         }
         return entriesAsList;
     }
@@ -143,14 +141,8 @@ public class FacetedDateHistogramFacet extends InternalFacet {
 
     public FacetedDateHistogramFacet(String name, LongObjectOpenHashMap<Entry> entries) {
         super(name);
-    	// Now we own the entries map. It is MUST come from the cache recycler..
         this.entries = entries;
     }
-
-    void releaseEntries() {
-        // do nothing: not our responsibility any more (TODO remove this!!!)
-    }
-
 
     @Override()
     public Facet reduce(ReduceContext context) {
