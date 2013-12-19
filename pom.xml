@@ -37,11 +37,11 @@
       </properties>
     </profile>
     <profile>
-      <id>0.90.7</id>
+      <id>0.90.8</id>
       <activation>
         <property>
           <name>env.ES</name>
-          <value>0.90.7</value>
+          <value>0.90.8</value>
         </property>
       </activation>
       <dependencies>
@@ -49,12 +49,12 @@
           <!-- hard requirement for testing -->
           <groupId>org.elasticsearch</groupId>
           <artifactId>elasticsearch</artifactId>
-          <version>[0.90.7]</version>
+          <version>[0.90.8]</version>
           <scope>provided</scope>
         </dependency>
       </dependencies>
       <properties>
-        <elasticsearch.version>0.90.5</elasticsearch.version>
+        <elasticsearch.version>0.90.8</elasticsearch.version>
       </properties>
     </profile>
 
