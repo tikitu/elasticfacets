@@ -4,7 +4,7 @@
   <groupId>org.leskes.elasticfacets</groupId>
   <artifactId>ElasticFacetsPlugin</artifactId>
   <packaging>jar</packaging>
-  <version>0.4.0</version>
+  <version>0.4.1</version>
   <name>elasticfacets</name>
   <url>http://maven.apache.org</url>
   <repositories>
@@ -37,11 +37,11 @@
       </properties>
     </profile>
     <profile>
-      <id>0.90.8</id>
+      <id>0.90.9</id>
       <activation>
         <property>
           <name>env.ES</name>
-          <value>0.90.8</value>
+          <value>0.90.9</value>
         </property>
       </activation>
       <dependencies>
@@ -49,12 +49,12 @@
           <!-- hard requirement for testing -->
           <groupId>org.elasticsearch</groupId>
           <artifactId>elasticsearch</artifactId>
-          <version>[0.90.8]</version>
+          <version>[0.90.9]</version>
           <scope>provided</scope>
         </dependency>
       </dependencies>
       <properties>
-        <elasticsearch.version>0.90.8</elasticsearch.version>
+        <elasticsearch.version>0.90.9</elasticsearch.version>
       </properties>
     </profile>
 
